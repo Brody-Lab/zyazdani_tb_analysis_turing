@@ -7,8 +7,8 @@ Code adapted from Bayesian Logistic Regression tutorial: https://turing.ml/dev/t
 
 """
 Action items left to complete for Stage 1
--Plot psychometric curves and ROC
--Make data 3D instead of 2D so that each rats data is kept throughout flow of whole program
+-~Plot psychometric curves and ROC
+-~Make data 3D instead of 2D so that each rats data is kept throughout flow of whole program
 -Extend model to make it higherarchical
 -Test model
 -Clean up wtd_1, wtd_2 into a matrix
@@ -114,12 +114,34 @@ data = load(cfg.IMPORTPATH_DATA)["regrMats"]
             y[i] ~ Bernoulli(v)
     end
     end;
-chains = []
-maximum_trial_length = 0;
-# Crunches the data for all rats
+# Determines the cutoff point for the number of trials
+min_trial = 2^63 -1
 for irat= 1 : 15
         # Provides the columns we need for that rat
         regrData =select(data[irat]["stimon"]["X"], :gr,28:37)
+        println("rat ", irat, "'s # of trials ", size(regrData)[1])
+        temp = size(regrData)[1]
+        if(temp < min_trial)
+            global min_trial = temp
+        end
+end
+# Assuming an 80-20 train-test split these will be the length of the trial dimension of
+# of those matrices respectively
+train_length = Int(min_trial * 0.8)
+test_length = Int(min_trial * 0.2)
+
+chains = []
+ train_rats = zeros(train_length,10,15)
+ train_label_rats = zeros(train_length, 15)
+ test_rats = zeros(test_length, 10, 15)
+ test_label_rats = zeros(test_length, 15)
+
+# Crunches the data for all rats
+for irat = 1 : 15
+        # Provides the columns we need for that rat
+        regrData =select(data[irat]["stimon"]["X"], :gr,28:37)
+        # Cuts off the number of trials so all rats can be put into one 3D matrix
+        regrData = regrData[1:min_trial,:]
         #Calls earlier function, splitting the data into training and test sets (80-20:training-test split)
         trainset, testset = split_data(regrData, target, at = 0.8)
         #Rescales all values to be centered at 0
@@ -131,49 +153,18 @@ for irat= 1 : 15
         # Converts training and test data into matrices
         train = Matrix(trainset[:, features])
         test = Matrix(testset[:, features])
-
-        # Converts training and test gr values into column vectors
+        # Stores each rats train and test matrix into a 3D matrix
+        train_rats[:,:,irat] = train;
+        test_rats[:,:, irat] = test;
+        # # Converts training and test gr values into column vectors
         train_label = trainset[:, target]
         test_label = testset[:, target];
+        # # Stores each rats train and test labels into a 2D matrix
+        train_label_rats[:,irat] = train_label
+        test_label_rats[:, irat] = test_label
         n, _ = size(train)
-        # Computes an array of click difference for each trial
-        bd_train = zeros(n)
-        for j = 1 : n
-            bd_train[j] = sum(train[j,:])
-        end
-        # Concatonates the rats choice for that trial (1 for right 0 for left) to the recently created bd_train
-        bd_train = hcat(bd_train, train_label)
-        # Find the minimum and maximum click difference and create an array of the length of their difference
-        # this will be the (x axis) of our psychometric graph
-        min_bd = minimum(bd_train[:,1])
-        max_bd = maximum(bd_train[:,1])
-        diff= max_bd-min_bd
-        # Array to count the frequency that of each click difference
-        frequ = zeros(Int(diff) + 1)
-        # Array to count the number of grs for each click difference
-        gr_by_click = zeros(Int(diff)+ 1)
-        # (y axis) of psychometric curve
-        #Array of the probabilities of going right for each click difference
-        prs = zeros(Int(diff) + 1)
-        # Iterates through all trials for that rat
-        for j = 1 : n
-            # Searches through all click differences and increments the proper
-            # element of the frequency array
-            frequ[Int(bd_train[j,1] + 1 - min_bd)]+= 1;
-            # Properly increments gr_by_click if that click difference ended up in a rightward choice
-            if(bd_train[j,2] == 1.0)
-                gr_by_click[Int(bd_train[j,1]+1 - min_bd)]+=1;
-            end
-        end
-        # Fills probabilities array with probability of right choice (y axis) of psychometric curve
-        for j = 1:length(prs)
-            prs[j] = (gr_by_click[j]/frequ[j])
-        end
-        plot(-32:35, prs)
 
-        # Cut all rats to be same length of trials
-        # if(maximum >= size(train, 1))
-        # end
+
         #Example = zeros(#length(train),10, 15)
         # for(i = 1: 15)
         #     Example[:,:,i] = train 3D
@@ -184,11 +175,11 @@ for irat= 1 : 15
         # end
 
 
-         chain = mapreduce(c -> sample(logistic_regression(train, train_label, n, 1), HMC(0.05, 10), 3000),
-             chainscat,
-             1:3
-         )
-        push!(chains,chain)
+          chain = mapreduce(c -> sample(logistic_regression(train, train_label, n, 1), HMC(0.05, 10), 3000),
+        #      chainscat,
+        #      1:3
+        #  )
+         push!(chains,chain)
 end
 #describe(chain)
 
@@ -232,11 +223,14 @@ end;
 threshold = 0.5
 predicted_gr_avg = 0;
 # Make the predictions.
-# Generalize this so that it predicts for all rats
-predictions_list = []
 
-predictions = prediction(test, chain, threshold)
-push!(predictions_list, predictions)
+# Generalize this so that it predicts for all rats using a for loop
+predictions_list = []
+# Make predictions for test set and
+for irat = 1:15
+    predictions = prediction(test_rats[:, :, irat], chains[irat], threshold)
+    push!(predictions_list, predictions)
+end
 
 
 # Some sample diagnostic measurements
@@ -256,8 +250,54 @@ predicted_grs/grs
 # y - axis is percentage of going to the right side
 # The model's and the actual and see if they match
 # Undo setting it at 0
-
-
+n = test_length
+for irat = 1:15
+    # Computes an array of click difference for each trial
+    bd_test = zeros(n)
+    for j = 1 : n
+        bd_test[j] = sum(test_rats[j,:,irat])
+    end
+    # Concatonates the rats choice for that trial (1 for right 0 for left) to the recently created bd_train
+    bd_test = hcat(bd_test, test_label_rats[:,irat])
+    bd_test = hcat(bd_test, predictions_list[irat])
+    # Find the minimum and maximum click difference and create an array of the length of their difference
+    # this will be the (x axis) of our psychometric graph
+    min_bd = minimum(bd_test[:,1])
+    max_bd = maximum(bd_test[:,1])
+    diff= max_bd-min_bd
+    # Array to count the frequency that of each click difference
+    frequ = zeros(Int(diff) + 1)
+    # Array to count the number of grs for each click difference
+    gr_by_click = zeros(Int(diff)+ 1)
+    # Same thing for pred
+    gr_by_click_pred = zeros(Int(diff)+ 1)
+    # (y axis) of psychometric curve
+    #Array of the probabilities of going right for each click difference
+    prs = zeros(Int(diff) + 1)
+    # Same thing for pred
+    prs_pred = zeros(Int(diff) + 1)
+    # Iterates through all trials for that rat
+    for j = 1 : n
+        # Searches through all click differences and increments the proper
+        # element of the frequency array
+        frequ[Int(bd_test[j,1] + 1 - min_bd)]+= 1;
+        # Properly increments gr_by_click if that click difference ended up in a rightward choice
+        if(bd_test[j,2] == 1.0)
+            gr_by_click[Int(bd_test[j,1]+1 - min_bd)]+=1;
+        end
+        if(bd_test[j,3] == 1.0)
+            gr_by_click_pred[Int(bd_test[j,1]+1 - min_bd)]+=1;
+        end
+    end
+    # Fills probabilities array with probability of right choice (y axis) of psychometric curve
+    for j = 1:length(prs)
+        prs[j] = (gr_by_click[j]/frequ[j])
+        prs_pred[j] = (gr_by_click_pred[j]/frequ[j])
+    end
+    plot(min_bd:max_bd, prs)
+    plot!(min_bd:max_bd, prs_pred)
+    figure(irat)
+end
 
 bd_test = zeros(size(test)[1])
 for j = 1 : length(bd_test)
@@ -274,6 +314,7 @@ diff= max_bd-min_bd
 frequ = zeros(Int(diff) + 1)
 gr_by_click = zeros(Int(diff)+ 1)
 prs_pred = zeros(Int(diff) + 1)
+
 for j = 1 : size(bd_test)[1]
     frequ[Int(bd_test[j,1] + 1 - min_bd)]+= 1;
     if(bd_test[j,2] == 1.0)
@@ -287,6 +328,5 @@ end
 plot!(min_bd:max_bd, prs_pred)
 plot(min_bd:max_bd, prs)
 
-plot(min_bd:(max_bd +1), prs)
 
 #samplePSDMatrix = [2 -1 0; -1 2 -1; 0 -1 2]
