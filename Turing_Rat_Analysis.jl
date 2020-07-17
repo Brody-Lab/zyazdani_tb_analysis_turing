@@ -12,6 +12,8 @@ Action items left to complete for Stage 1
 -Extend model to make it higherarchical
 -Test model
 -Clean up wtd_1, wtd_2 into a matrix
+-Might also want to plot confidence interval
+
 
 """
 cfg = (
@@ -56,6 +58,25 @@ using MLDataUtils: shuffleobs, stratifiedobs, rescale!
 # Set a seed for reproducibility.
 using Random
 Random.seed!(0);
+
+using MAT
+using DataFrames
+using JLD2, FileIO
+using Dates
+
+using GLM
+
+using Printf
+using PyPlot
+using PyCall
+using MLBase
+using Statistics
+using DataFrames
+using Conda
+
+sklmetrics = pyimport("sklearn.metrics")
+
+
 
 # Turn off progress monitor.
 Turing.turnprogress(false)
@@ -119,7 +140,7 @@ min_trial = 2^63 -1
 for irat= 1 : 15
         # Provides the columns we need for that rat
         regrData =select(data[irat]["stimon"]["X"], :gr,28:37)
-        println("rat ", irat, "'s # of trials ", size(regrData)[1])
+        #println("rat ", irat, "'s # of trials: ", size(regrData)[1])
         temp = size(regrData)[1]
         if(temp < min_trial)
             global min_trial = temp
@@ -135,7 +156,7 @@ train_rats = zeros(train_length,10,15)
 train_label_rats = zeros(train_length, 15)
 test_rats = zeros(test_length, 10, 15)
 test_label_rats = zeros(test_length, 15)
-
+rat_num = 0;
 # Crunches the data for all rats
 for irat = 1 : 15
         # Provides the columns we need for that rat
@@ -175,11 +196,11 @@ for irat = 1 : 15
         # end
 
 
-          chain = mapreduce(c -> sample(logistic_regression(train, train_label, n, 1), HMC(0.05, 10), 3000),
-         chainscat,
-             1:3
-         )
-         push!(chains,chain)
+          chain = mapreduce(c -> sample(logistic_regression(train_rats[:,:,irat], train_label_rats[:,irat], n, 1), HMC(0.05, 10), 3000),
+          chainscat,
+              1:3
+          )
+          push!(chains,chain)
 end
 #describe(chain)
 
@@ -210,11 +231,12 @@ function prediction(x::Matrix, chain, threshold)
     # Calculate the logistic function for each element in the test set.
     for i in 1:n
         num = logistic(beta .+ wtd_1 * x[i,1] .+ wtd_2 * x[i,2] .+ wtd_3 * x[i,3] .+ wtd_4 * x[i,4] .+ wtd_5 * x[i,5] .+ wtd_6 * x[i,6] .+ wtd_7 * x[i,7] .+ wtd_8 * x[i,8] .+ wtd_9 * x[i,9] .+ wtd_10 * x[i,10])
-        if num >= threshold
-            v[i] = 1
-        else
-            v[i] = 0
-        end
+        # if num >= threshold
+        #     v[i] = 1
+        # else
+        #     v[i] = 0
+        # end
+        v[i] = num;
     end
     return v
 end;
@@ -226,12 +248,17 @@ predicted_gr_avg = 0;
 
 # Generalize this so that it predicts for all rats using a for loop
 predictions_list = []
+ROC_scores = []
 # Make predictions for test set and
 for irat = 1:15
     predictions = prediction(test_rats[:, :, irat], chains[irat], threshold)
+    ROC_score = sklmetrics.roc_auc_score(test_label_rats[:,irat], predictions)
+    push!(ROC_scores, ROC_score)
     push!(predictions_list, predictions)
 end
-
+xlabel("ROC scores")
+ylabel("Frequency")
+hist(ROC_scores,50)
 
 # Some sample diagnostic measurements
 # Calculate MSE for our test set.
@@ -245,20 +272,24 @@ predicted_not_grs = sum(test_label .== predictions .== 0)
 predicted_grs/grs
 
 
+
 #Plot psychometric curve for each rat
 # x - axis is difference number of clicks abs(L-R)
 # y - axis is percentage of going to the right side
 # The model's and the actual and see if they match
 # Undo setting it at 0
 n = test_length
-for irat = 1:15
+
+#for irat = 1:15
     # Computes an array of click difference for each trial
+    # Graphed 6 of 15
     bd_test = zeros(n)
     for j = 1 : n
         bd_test[j] = sum(test_rats[j,:,irat])
     end
-    # Concatonates the rats choice for that trial (1 for right 0 for left) to the recently created bd_train
+    # Concatonates the actual choice for each trial (1 for right, 0 for left)
     bd_test = hcat(bd_test, test_label_rats[:,irat])
+    # Concatonates the probability of going right for each trial that was produced by the model
     bd_test = hcat(bd_test, predictions_list[irat])
     # Find the minimum and maximum click difference and create an array of the length of their difference
     # this will be the (x axis) of our psychometric graph
@@ -270,7 +301,7 @@ for irat = 1:15
     # Array to count the number of grs for each click difference
     gr_by_click = zeros(Int(diff)+ 1)
     # Same thing for pred
-    gr_by_click_pred = zeros(Int(diff)+ 1)
+    #gr_by_click_pred = zeros(Int(diff)+ 1)
     # (y axis) of psychometric curve
     #Array of the probabilities of going right for each click difference
     prs = zeros(Int(diff) + 1)
@@ -278,6 +309,8 @@ for irat = 1:15
     prs_pred = zeros(Int(diff) + 1)
     # Iterates through all trials for that rat
     for j = 1 : n
+        # Insert a threshold to get it back in 0's and ones.
+        # if data > threshold then = 1
         # Searches through all click differences and increments the proper
         # element of the frequency array
         frequ[Int(bd_test[j,1] + 1 - min_bd)]+= 1;
@@ -285,18 +318,20 @@ for irat = 1:15
         if(bd_test[j,2] == 1.0)
             gr_by_click[Int(bd_test[j,1]+1 - min_bd)]+=1;
         end
-        if(bd_test[j,3] == 1.0)
-            gr_by_click_pred[Int(bd_test[j,1]+1 - min_bd)]+=1;
-        end
+            prs_pred[Int(bd_test[j,1]+1 - min_bd)]+=bd_test[j,3];
     end
     # Fills probabilities array with probability of right choice (y axis) of psychometric curve
     for j = 1:length(prs)
         prs[j] = (gr_by_click[j]/frequ[j])
-        prs_pred[j] = (gr_by_click_pred[j]/frequ[j])
+        prs_pred[j] = (prs_pred[j]/frequ[j])
     end
-    plot(min_bd:max_bd, prs)
-    plot!(min_bd:max_bd, prs_pred)
-end
+    plot(min_bd:max_bd, prs, label = "Actual rat")
+    xlabel!("Click difference (#R - #L)")
+    ylabel!("Probability of going right")
+    plot!(min_bd:max_bd, prs_pred, label = "Model prediction")
+#end
+
+
 
 # bd_test = zeros(size(test)[1])
 # for j = 1 : length(bd_test)
