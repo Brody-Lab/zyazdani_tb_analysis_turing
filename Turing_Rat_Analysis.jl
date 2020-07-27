@@ -16,6 +16,7 @@ Action items left to complete for Stage 1
 
 
 """
+
 cfg = (
 ## io options
 TITLE           = "frozen_noise_1D_bd_auc",
@@ -59,15 +60,16 @@ using MLDataUtils: shuffleobs, stratifiedobs, rescale!
 using Random
 Random.seed!(0);
 
+
 using MAT
 using DataFrames
 using JLD2, FileIO
 using Dates
-
-using GLM
+using LinearAlgebra
+#using GLM
 
 using Printf
-using PyPlot
+#using PyPlot
 using PyCall
 using MLBase
 using Statistics
@@ -75,11 +77,10 @@ using DataFrames
 using Conda
 
 sklmetrics = pyimport("sklearn.metrics")
-
-
+include("utils.jl")
 
 # Turn off progress monitor.
-Turing.turnprogress(false)
+#Turing.turnprogress(false)
 
 # Function to be used to split the data into training and test sets ß
 function split_data(df, target; at = 0.70)
@@ -88,40 +89,28 @@ function split_data(df, target; at = 0.70)
 end
 
 #Factors used to predict gr so wtd_1 - wtd_10
-features = [:wtd_1, :wtd_10, :wtd_2, :wtd_3,:wtd_4,:wtd_5,:wtd_6,:wtd_7,:wtd_8,:wtd_9]
+#features = [:wtd_1, :wtd_10, :wtd_2, :wtd_3,:wtd_4,:wtd_5,:wtd_6,:wtd_7,:wtd_8,:wtd_9]
 
 #The column that we want to predict (gr is whether the rat went right or not)
 target = :gr
 
+#filelist = searchdir(cfg.IMPORTPATH_DATA, ".mat")
+
 #Imports data
 data = load(cfg.IMPORTPATH_DATA)["regrMats"]
 
-# Fits the model
-#DEFINE MODEL AS HIGHERARCHICAL
-@model logistic_regression(x, y, n, σ) = begin
-        #Make normal distribution n+1 dimensional
+
+# LVR model
+@model logistic_regression_LVR(x, y, n, σ, bigSigma) = begin
+        #
         beta ~ Normal(0, σ)
-        # Multivariate Normal instead of normal
-        #w ~ MultivariateNormal(zeros(10), covarianceMatrix #(10x10 bigSigma)
-        # mu is a vector and sigma is a PSD matrix
         #MvNormal(mu, sigma)
-        #w ~ MvNormal(zeros(10), bigSigma)
-        #Change w1 to wtd_1 and w2 to wtd_2 and so on
-         wtd_1 ~  Normal(0, σ)
-         wtd_2 ~  Normal(0, σ)
-         wtd_3 ~  Normal(0, σ)
-         wtd_4 ~  Normal(0, σ)
-         wtd_5 ~  Normal(0, σ)
-         wtd_6 ~  Normal(0, σ)
-         wtd_7 ~  Normal(0, σ)
-         wtd_8 ~  Normal(0, σ)
-         wtd_9 ~  Normal(0, σ)
-         wtd_10 ~  Normal(0, σ)
-         #w = hcat(wtd_1,wtd_2,wtd_3,wtd_4,wtd_5,wtd_6,wtd_7,wtd_8,wtd_9,wtd_10)
+        # mu is a vector and sigma is a PSD matrix
+        w_R ~ MvNormal(zeros(10), bigSigma)
+        w_L ~ MvNormal(zeros(10), bigSigma)
 
         #k = 0;
         #for j = 1:irat
-        for i = 1:n
             #HIGHERARCHY NEEDS TO GO HERE
             #10 things one for each tb for that trial]
             #for j = 1:10
@@ -130,16 +119,64 @@ data = load(cfg.IMPORTPATH_DATA)["regrMats"]
             # v = logistic(k)
             #v = logistic(beta + wtd_1 * x[i,1] + wtd_2*x[i,2] + wtd_3*x[i,3] + wtd_4*x[i,4] + wtd_5*x[i,5] + wtd_6*x[i,6] + wtd_7*x[i,7] + wtd_8*x[i,8] + wtd_9*x[i,9] + wtd_10*x[i,10])
             #v[irat] = logistic(beta + wtd_1 * x[i,1,j] + wtd_2*x[i,2,j] + wtd_3*x[i,3,j] + wtd_4*x[i,4] + wtd_5*x[i,5] + wtd_6*x[i,6] + wtd_7*x[i,7] + wtd_8*x[i,8] + wtd_9*x[i,9] + wtd_10*x[i,10])
-            v = logistic(beta + wtd_1 * x[i,1] + wtd_2*x[i,2] + wtd_3*x[i,3] + wtd_4*x[i,4] + wtd_5*x[i,5] + wtd_6*x[i,6] + wtd_7*x[i,7] + wtd_8*x[i,8] + wtd_9*x[i,9] + wtd_10*x[i,10])
-            #y[i,irat] ~ Bernoulli(v[irat])
-            y[i] ~ Bernoulli(v)
-    end
-    end;
+        #Seperate out LVR matrices
+            xL = x[:,1:10]
+            xR = x[:,11:20]
+            logistic_Matrix = beta .+ (xR * w_R) +  (xL* w_L)
+            # for i = 1:n
+            #     v = logistic(logistic_Matrix[i,:])
+            # #y[i,irat] ~ Bernoulli(v[irat])
+            #     y[i] ~ Bernoulli(v)
+            # end
+             v = logistic.(logistic_Matrix)
+             y = Bernoulli.(v)
+end;
+
+# Fits the model
+#DEFINE MODEL AS HIGHERARCHICAL
+
+# @model logistic_regression(x, y, n, σ) = begin
+#         #Make normal distribution n+1 dimensional
+#         beta ~ Normal(0, σ)
+#         # Multivariate Normal instead of normal
+#         #w ~ MultivariateNormal(zeros(10), covarianceMatrix #(10x10 bigSigma)
+#         # mu is a vector and sigma is a PSD matrix
+#         #MvNormal(mu, sigma)
+#         #w ~ MvNormal(zeros(10), bigSigma)
+#         #Change w1 to wtd_1 and w2 to wtd_2 and so on
+#          wtd_1 ~  Normal(0, σ)
+#          wtd_2 ~  Normal(0, σ)
+#          wtd_3 ~  Normal(0, σ)
+#          wtd_4 ~  Normal(0, σ)
+#          wtd_5 ~  Normal(0, σ)
+#          wtd_6 ~  Normal(0, σ)
+#          wtd_7 ~  Normal(0, σ)
+#          wtd_8 ~  Normal(0, σ)
+#          wtd_9 ~  Normal(0, σ)
+#          wtd_10 ~  Normal(0, σ)
+#          #w = hcat(wtd_1,wtd_2,wtd_3,wtd_4,wtd_5,wtd_6,wtd_7,wtd_8,wtd_9,wtd_10)
+#
+#         #k = 0;
+#         #for j = 1:irat
+#         for i = 1:n
+#             #HIGHERARCHY NEEDS TO GO HERE
+#             #10 things one for each tb for that trial]
+#             #for j = 1:10
+#             #     k+= w[:,j] * x[i, j]
+#             # end
+#             # v = logistic(k)
+#             #v = logistic(beta + wtd_1 * x[i,1] + wtd_2*x[i,2] + wtd_3*x[i,3] + wtd_4*x[i,4] + wtd_5*x[i,5] + wtd_6*x[i,6] + wtd_7*x[i,7] + wtd_8*x[i,8] + wtd_9*x[i,9] + wtd_10*x[i,10])
+#             #v[irat] = logistic(beta + wtd_1 * x[i,1,j] + wtd_2*x[i,2,j] + wtd_3*x[i,3,j] + wtd_4*x[i,4] + wtd_5*x[i,5] + wtd_6*x[i,6] + wtd_7*x[i,7] + wtd_8*x[i,8] + wtd_9*x[i,9] + wtd_10*x[i,10])
+#             v = logistic(beta + wtd_1 * x[i,1] + wtd_2*x[i,2] + wtd_3*x[i,3] + wtd_4*x[i,4] + wtd_5*x[i,5] + wtd_6*x[i,6] + wtd_7*x[i,7] + wtd_8*x[i,8] + wtd_9*x[i,9] + wtd_10*x[i,10])
+#             #y[i,irat] ~ Bernoulli(v[irat])
+#             y[i] ~ Bernoulli(v)
+#     end
+#     end;
 # Determines the cutoff point for the number of trials
 min_trial = 2^63 -1
 for irat= 1 : 15
         # Provides the columns we need for that rat
-        regrData =select(data[irat]["stimon"]["X"], :gr,28:37)
+        regrData = select(data[irat]["stimon"]["X"], :gr,28:37)
         #println("rat ", irat, "'s # of trials: ", size(regrData)[1])
         temp = size(regrData)[1]
         if(temp < min_trial)
@@ -151,39 +188,54 @@ end
 train_length = Int(min_trial * 0.8)
 test_length = Int(min_trial * 0.2)
 
-chains = []
-train_rats = zeros(train_length,10,15)
-train_label_rats = zeros(train_length, 15)
-test_rats = zeros(test_length, 10, 15)
-test_label_rats = zeros(test_length, 15)
+# chains_list = []
+chains_LVR_list = []
+#train_rats = zeros(train_length,10,15)
+train_rats_LVR = zeros(train_length, 20, 15)
+#train_label_rats = zeros(train_length, 15)
+train_label_LVR = zeros(train_length, 15)
+#test_rats = zeros(test_length, 10, 15)
+test_rats_LVR = zeros(test_length, 20, 15)
+#test_label_rats = zeros(test_length, 15)
+test_label_LVR = zeros(test_length, 15)
 rat_num = 0;
 # Crunches the data for all rats
 for irat = 1 : 15
+        println("Processing rat ", irat)
         # Provides the columns we need for that rat
-        regrData =select(data[irat]["stimon"]["X"], :gr,28:37)
+        #regrData =select(data[irat]["stimon"]["X"], :gr,28:37)
+        # Grabs the click difference left and right columns from the data set
+        LVR_data = select(data[irat]["stimon"]["X"], :gr, 6:15,17:26)
+        #regrData = regrData[1:min_trial,:]
         # Cuts off the number of trials so all rats can be put into one 3D matrix
-        regrData = regrData[1:min_trial,:]
+        LVR_data = LVR_data[1:min_trial,:]
         #Calls earlier function, splitting the data into training and test sets (80-20:training-test split)
-        trainset, testset = split_data(regrData, target, at = 0.8)
-        #Rescales all values to be centered at 0
+        #trainset, testset = split_data(regrData, target, at = 0.8)
+        trainset_LVR, testset_LVR = split_data(LVR_data, target, at = 0.8)
+        # Optional Rescaling all values to be centered at 0
          # for i in features
          #   μ, σ = rescale!(trainset[!, i], obsdim=1)
          #   rescale!(testset[!, i], μ, σ, obsdim=1)
          # end
-
         # Converts training and test data into matrices
-        train = Matrix(trainset[:, features])
-        test = Matrix(testset[:, features])
+        #train = Matrix(trainset[:, features])
+        train_LVR = Matrix(trainset_LVR[:,2:21])
+        #test = Matrix(testset[:, features])
+        test_LVR = Matrix(testset_LVR[:, 2:21])
         # Stores each rats train and test matrix into a 3D matrix
-        train_rats[:,:,irat] = train;
-        test_rats[:,:, irat] = test;
+        #train_rats[:,:,irat] = train;
+        train_rats_LVR[:,:, irat] = train_LVR
+        #test_rats[:,:, irat] = test;
+        test_rats_LVR[:,:,irat] = test_LVR
         # # Converts training and test gr values into column vectors
-        train_label = trainset[:, target]
-        test_label = testset[:, target];
+        #train_label = trainset[:, target]
+        #test_label = testset[:, target];
         # # Stores each rats train and test labels into a 2D matrix
-        train_label_rats[:,irat] = train_label
-        test_label_rats[:, irat] = test_label
-        n, _ = size(train)
+        #train_label_rats[:,irat] = train_label
+        #test_label_rats[:, irat] = test_label
+        train_label_LVR[:,irat] = trainset_LVR[:, target]
+        test_label_LVR[:, irat] = testset_LVR[:, target]
+        #n, _ = size(train)
 
 
         #Example = zeros(#length(train),10, 15)
@@ -194,31 +246,67 @@ for irat = 1 : 15
               #test_label 2D
 
         # end
-
-
-          chain = mapreduce(c -> sample(logistic_regression(train_rats[:,:,irat], train_label_rats[:,irat], n, 1), HMC(0.05, 10), 3000),
-          chainscat,
-              1:3
-          )
-          push!(chains,chain)
+           chain_LVR = mapreduce(c -> sample(logistic_regression_LVR(train_rats_LVR[:,:,irat], train_label_LVR[:,irat], train_length, 1, I), HMC(0.05, 10), 3000),
+           chainscat,
+               1:3
+           )
+           push!(chains_LVR_list, chain_LVR)
+          #
+          # chain = mapreduce(c -> sample(logistic_regression(train_rats[:,:,irat], train_label_rats[:,irat], n, 1), HMC(0.05, 10), 3000),
+          # chainscat,
+          #     1:3
+          # )
+          # push!(chains_list,chain)
 end
 #describe(chain)
 
 #plot(chains[1])
 
-function prediction(x::Matrix, chain, threshold)
+# function prediction(x::Matrix, chain, threshold)
+#     # Pull the means from each parameter's sampled values in the chain.
+#     beta = mean(chain[:beta].value)
+#     wtd_1 = mean(chain[:wtd_1].value)
+#     wtd_2 = mean(chain[:wtd_2].value)
+#     wtd_3 = mean(chain[:wtd_3].value)
+#     wtd_4 = mean(chain[:wtd_4].value)
+#     wtd_5 = mean(chain[:wtd_5].value)
+#     wtd_6 = mean(chain[:wtd_6].value)
+#     wtd_7 = mean(chain[:wtd_7].value)
+#     wtd_8 = mean(chain[:wtd_8].value)
+#     wtd_9 = mean(chain[:wtd_9].value)
+#     wtd_10 = mean(chain[:wtd_10].value)
+#     # for i in features
+#     #     i = mean(chain[i].value)
+#     # end
+#     # Retrieve the number of rows.
+#     n, _ = size(x)
+#
+#     # Generate a vector to store our predictions.
+#     v = Vector{Float64}(undef, n)
+#
+#     # Calculate the logistic function for each element in the test set.
+#     for i in 1:n
+#         num = logistic(beta .+ wtd_1 * x[i,1] .+ wtd_2 * x[i,2] .+ wtd_3 * x[i,3] .+ wtd_4 * x[i,4] .+ wtd_5 * x[i,5] .+ wtd_6 * x[i,6] .+ wtd_7 * x[i,7] .+ wtd_8 * x[i,8] .+ wtd_9 * x[i,9] .+ wtd_10 * x[i,10])
+#         # if num >= threshold
+#         #     v[i] = 1
+#         # else
+#         #     v[i] = 0
+#         # end
+#         v[i] = num;
+#     end
+#     return v
+# end;
+
+function prediction_LVR(x::Matrix, chain, threshold)
     # Pull the means from each parameter's sampled values in the chain.
     beta = mean(chain[:beta].value)
-    wtd_1 = mean(chain[:wtd_1].value)
-    wtd_2 = mean(chain[:wtd_2].value)
-    wtd_3 = mean(chain[:wtd_3].value)
-    wtd_4 = mean(chain[:wtd_4].value)
-    wtd_5 = mean(chain[:wtd_5].value)
-    wtd_6 = mean(chain[:wtd_6].value)
-    wtd_7 = mean(chain[:wtd_7].value)
-    wtd_8 = mean(chain[:wtd_8].value)
-    wtd_9 = mean(chain[:wtd_9].value)
-    wtd_10 = mean(chain[:wtd_10].value)
+    w_L = zeros(10)
+    w_R = zeros(10)
+    for i = 1:10
+        w_L[i] = mean(chain[:w_L][i].value)
+        w_R[i] = mean(chain[:w_R][i].value)
+    end
+
     # for i in features
     #     i = mean(chain[i].value)
     # end
@@ -227,36 +315,40 @@ function prediction(x::Matrix, chain, threshold)
 
     # Generate a vector to store our predictions.
     v = Vector{Float64}(undef, n)
-
+    #Split Left and right
+    xL = x[:,1:10]
+    xR = x[:,11:20]
     # Calculate the logistic function for each element in the test set.
-    for i in 1:n
-        num = logistic(beta .+ wtd_1 * x[i,1] .+ wtd_2 * x[i,2] .+ wtd_3 * x[i,3] .+ wtd_4 * x[i,4] .+ wtd_5 * x[i,5] .+ wtd_6 * x[i,6] .+ wtd_7 * x[i,7] .+ wtd_8 * x[i,8] .+ wtd_9 * x[i,9] .+ wtd_10 * x[i,10])
+        v = logistic.(beta .+ (xR * w_R) + (xL * w_L))
         # if num >= threshold
         #     v[i] = 1
         # else
         #     v[i] = 0
         # end
-        v[i] = num;
-    end
     return v
 end;
-
 # Set the prediction threshold.
 threshold = 0.5
-predicted_gr_avg = 0;
+
 # Make the predictions.
 
 # Generalize this so that it predicts for all rats using a for loop
-predictions_list = []
-ROC_scores = []
+# predictions_list = []
+predictions_list_LVR = []
+# ROC_scores = []
+ROC_scores_LVR = []
 # Make predictions for test set and
 for irat = 1:15
-    predictions = prediction(test_rats[:, :, irat], chains[irat], threshold)
-    ROC_score = sklmetrics.roc_auc_score(test_label_rats[:,irat], predictions)
-    push!(ROC_scores, ROC_score)
-    push!(predictions_list, predictions)
+    #predictions = prediction(test_rats[:, :, irat], chains_list[irat], threshold)
+    predictions_LVR = prediction_LVR(test_rats_LVR[:,:,irat], chains_LVR_list[irat], threshold)
+    #ROC_score = sklmetrics.roc_auc_score(test_label_rats[:,irat], predictions)
+    grs_LVR = sum(test_label_LVR[:,irat])
+    predicted_grs_LVR = sum(predictions_LVR .>= threshold)
+    println(predicted_grs_LVR/grs_LVR)
+    #push!(ROC_scores, ROC_score)
+    push!(predictions_list_LVR, predictions_LVR)
 end
-xlabel("ROC scores")
+xlabel("ROC AUC scores")
 ylabel("Frequency")
 hist(ROC_scores,50)
 
@@ -264,12 +356,14 @@ hist(ROC_scores,50)
 # Calculate MSE for our test set.
 loss = sum((predictions - test_label).^2) / length(test_label)
 
-grs = sum(test_label_rats[:,1])
+#grs = sum(test_label_rats[:,1])
+grs_LVR = sum(test_label_LVR[:,1])
 not_grs = length(test_label) - grs
-predicted_grs = sum(test_label_rats[:,1] .== predictions_list[1] .== 1)
+#predicted_grs = sum(test_label_rats[:,1] .== predictions_list[1] .== 1)
+predicted_grs_LVR = sum(predictions_LVR .>= 0.5)
 predicted_not_grs = sum(test_label .== predictions .== 0)
 # Percentage accuracy of grs of the model
-predicted_grs/grs
+predicted_grs_LVR/grs_LVR
 
 
 
@@ -279,59 +373,108 @@ predicted_grs/grs
 # The model's and the actual and see if they match
 # Undo setting it at 0
 n = test_length
-
-#for irat = 1:15
+Psychometric_2D_plots = [];
+for irat = 1:15
     # Computes an array of click difference for each trial
-    # Graphed 6 of 15
-    bd_test = zeros(n)
+    bd_test_LVR_predictions = zeros(n,2)
+    bd_test_LVR = zeros(n,2)
+    #bd_test = zeros(n)
     for j = 1 : n
-        bd_test[j] = sum(test_rats[j,:,irat])
+        #1st column is total left clicks for that trial
+        bd_test_LVR[j,1] = sum(test_rats_LVR[j,1:10,irat])
+        #2nd column is total right clicks for that trial
+        bd_test_LVR[j,2] = sum(test_rats_LVR[j,11:20,irat])
+        #bd_test[j] = sum(test_rats[j,:,1])
     end
     # Concatonates the actual choice for each trial (1 for right, 0 for left)
-    bd_test = hcat(bd_test, test_label_rats[:,irat])
+    #bd_test = hcat(bd_test, test_label_rats[:,1])
+    bd_test_LVR = hcat(bd_test_LVR, test_label_LVR[:,irat])
     # Concatonates the probability of going right for each trial that was produced by the model
-    bd_test = hcat(bd_test, predictions_list[irat])
+    #bd_test = hcat(bd_test, predictions_list[1])
+    bd_test_LVR = hcat(bd_test_LVR, predictions_list_LVR[1])
+    #Goes through predictions and rounds them to 0 or 1
+    for k = 1:test_length
+        if(bd_test_LVR[k,4] >= 0.5)
+            bd_test_LVR[k,4] = 1
+        else
+            bd_test_LVR[k,4] = 0
+        end
+    end
     # Find the minimum and maximum click difference and create an array of the length of their difference
     # this will be the (x axis) of our psychometric graph
     min_bd = minimum(bd_test[:,1])
     max_bd = maximum(bd_test[:,1])
-    diff= max_bd-min_bd
+    # Max and min click difference seperately for left and right
+    #min_bd_left = minimum(bd_test_LVR[:,1])
+    #max_bd_left = maximum(bd_test_LVR[:,1])
+    #diff= max_bd-min_bd
     # Array to count the frequency that of each click difference
-    frequ = zeros(Int(diff) + 1)
+    #frequ = zeros(Int(diff) + 1)
     # Array to count the number of grs for each click difference
-    gr_by_click = zeros(Int(diff)+ 1)
+    #gr_by_click = zeros(Int(diff)+ 1)
     # Same thing for pred
     #gr_by_click_pred = zeros(Int(diff)+ 1)
     # (y axis) of psychometric curve
     #Array of the probabilities of going right for each click difference
-    prs = zeros(Int(diff) + 1)
+    #prs = zeros(Int(diff) + 1)
     # Same thing for pred
-    prs_pred = zeros(Int(diff) + 1)
+    #prs_pred = zeros(Int(diff) + 1)
     # Iterates through all trials for that rat
-    for j = 1 : n
-        # Insert a threshold to get it back in 0's and ones.
-        # if data > threshold then = 1
-        # Searches through all click differences and increments the proper
-        # element of the frequency array
-        frequ[Int(bd_test[j,1] + 1 - min_bd)]+= 1;
-        # Properly increments gr_by_click if that click difference ended up in a rightward choice
-        if(bd_test[j,2] == 1.0)
-            gr_by_click[Int(bd_test[j,1]+1 - min_bd)]+=1;
-        end
-            prs_pred[Int(bd_test[j,1]+1 - min_bd)]+=bd_test[j,3];
-    end
+    # for j = 1 : n
+    #     # Insert a threshold to get it back in 0's and ones.
+    #     # if data > threshold then = 1
+    #     # Searches through all click differences and increments the proper
+    #     # element of the frequency array
+    #     frequ[Int(bd_test[j,1] + 1 - min_bd)]+= 1;
+    #     # Properly increments gr_by_click if that click difference ended up in a rightward choice
+    #     if(bd_test[j,2] == 1.0)
+    #         gr_by_click[Int(bd_test[j,1]+1 - min_bd)]+=1;
+    #     end
+    #         prs_pred[Int(bd_test[j,1]+1 - min_bd)]+=bd_test[j,3];
+    # end
     # Fills probabilities array with probability of right choice (y axis) of psychometric curve
-    for j = 1:length(prs)
-        prs[j] = (gr_by_click[j]/frequ[j])
-        prs_pred[j] = (prs_pred[j]/frequ[j])
-    end
-    plot(min_bd:max_bd, prs, label = "Actual rat")
-    xlabel!("Click difference (#R - #L)")
-    ylabel!("Probability of going right")
-    plot!(min_bd:max_bd, prs_pred, label = "Model prediction")
+    # for j = 1:length(prs)
+    #     prs[j] = (gr_by_click[j]/frequ[j])
+    #     prs_pred[j] = (prs_pred[j]/frequ[j])
+    # end
+#gadfly
+#Jupyter notebook
+# Plots
+    # plot(min_bd:max_bd, prs, label = "Actual rat")
+    # xlabel!("Click difference (#R - #L)")
+    # ylabel!("Probability of going right")
+    # plot!(min_bd:max_bd, prs_pred, label = "Model prediction")
+    # figure(irat)
 #end
+#Adding in color first for actual
+grs = Int(sum(bd_test_LVR[:,3]))
+gls = Int(abs(test_length - grs))
+bd_test_LVR_right = zeros(grs,4)
+bd_test_LVR_left = zeros(gls,4)
+grcount = 1
+glcount = 1
 
+# bd_test_LVR_right = bd_test_LVR[bd_test_LVR[:,3] .>0]
+for i = 1:test_length
+    if(bd_test_LVR[i,3] == 1.0)
+        bd_test_LVR_right[grcount,:] = bd_test_LVR[i,:]
+         grcount+= 1
+    else
+        bd_test_LVR_left[glcount,:] = bd_test_LVR[i,:]
+         glcount += 1
+end
+end
+#2D psychometric
 
+p1 = scatter(bd_test_LVR_left[:,2], bd_test_LVR_left[:,1], color = "blue", label = "Choice left", )
+p1 = scatter!(bd_test_LVR_right[:,2], bd_test_LVR_right[:,1],  color = "red", label = "Choice Right")
+push!(Psychometric_2D_plots, p1)
+
+# p2 = scatter(bd_test_LVR[:,2],bd_test_LVR[:,1])
+
+end
+
+plot(Psychometric_2D_plots[13],Psychometric_2D_plots[14],Psychometric_2D_plots[15], layout = (1, 3), title = "2D Psychometric", xlabel = "Right clicks", ylabel = "Left clicks", legend = false)
 
 # bd_test = zeros(size(test)[1])
 # for j = 1 : length(bd_test)
@@ -364,3 +507,9 @@ n = test_length
 
 
 #samplePSDMatrix = [2 -1 0; -1 2 -1; 0 -1 2]
+
+## Save dataframes for next step in logit analysis
+filename1 = cfg.EXPORTPATH_DATA * "chains_allrats_LVR_stimon" *
+ "Bayesian Logistic Regression LVR.jld2"
+println("Saving: " * string(filename1))
+save(filename1, "chains_all_rats_LVR", chains_LVR_list)
