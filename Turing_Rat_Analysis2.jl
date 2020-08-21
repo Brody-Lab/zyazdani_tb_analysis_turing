@@ -2,7 +2,6 @@
 Turing analysis of Rats
 Zach Yazdani
 Code adapted from Bayesian Logistic Regression tutorial: https://turing.ml/dev/tutorials/2-logisticregression/ tutorial
-
 The code uses click difference data from the Poissont clicks task to fit 3 Markov Chain models.
 MODELS
 Theoretically models 1) and 2) should be exactly the same but they are not.
@@ -25,8 +24,6 @@ Action items left to complete for Stage 1
 -Extend model to make it higherarchical
 -Test model
 -Might also want to plot confidence interval
-
-
 """
 """
 cfg
@@ -120,153 +117,153 @@ Model fits using Turing
 # bd model using a Matrix of w's
 # Weights click differences at each time bin seperately
 @model logistic_regression_Matrix(x, y, n, σ, bigSigma) = begin
-        #Make normal distribution n+1 dimensional
-        beta ~ Normal(0, σ)
-        # Multivariate Normal instead of normal
-        #w ~ MultivariateNormal(zeros(10), covarianceMatrix #(10x10 bigSigma)
-        # mu is a vector and sigma is a PSD matrix
-        #MvNormal(mu, sigma)
-        #w ~ MvNormal(zeros(10), bigSigma)
-        #Change w1 to wtd_1 and w2 to wtd_2 and so on
-        w ~ MvNormal(zeros(10), bigSigma)
-        #w = hcat(wtd_1,wtd_2,wtd_3,wtd_4,wtd_5,wtd_6,wtd_7,wtd_8,wtd_9,wtd_10)
-        #k = 0;
-        #for j = 1:irat
-        #for i = 1:n
-            #HIGHERARCHY NEEDS TO GO HERE
-            #10 things one for each tb for that trial]
-            #for j = 1:10
-            #     k+= w[:,j] * x[i, j]
-            # end
-            # v = logistic(k)
-            #v = logistic(beta + wtd_1 * x[i,1] + wtd_2*x[i,2] + wtd_3*x[i,3] + wtd_4*x[i,4] + wtd_5*x[i,5] + wtd_6*x[i,6] + wtd_7*x[i,7] + wtd_8*x[i,8] + wtd_9*x[i,9] + wtd_10*x[i,10])
-            #v[irat] = logistic(beta + wtd_1 * x[i,1,j] + wtd_2*x[i,2,j] + wtd_3*x[i,3,j] + wtd_4*x[i,4] + wtd_5*x[i,5] + wtd_6*x[i,6] + wtd_7*x[i,7] + wtd_8*x[i,8] + wtd_9*x[i,9] + wtd_10*x[i,10])
-            #v = logistic(beta + wtd_1 * x[i,1] + wtd_2*x[i,2] + wtd_3*x[i,3] + wtd_4*x[i,4] + wtd_5*x[i,5] + wtd_6*x[i,6] + wtd_7*x[i,7] + wtd_8*x[i,8] + wtd_9*x[i,9] + wtd_10*x[i,10])
-            for i = 1:n
-                v = logistic(beta + transpose(x[i,:]) * w)
-                y[i] ~ Bernoulli(v)
-            end
+    #Make normal distribution n+1 dimensional
+    beta ~ Normal(0, σ)
+    # Multivariate Normal instead of normal
+    #w ~ MultivariateNormal(zeros(10), covarianceMatrix #(10x10 bigSigma)
+    # mu is a vector and sigma is a PSD matrix
+    #MvNormal(mu, sigma)
+    #w ~ MvNormal(zeros(10), bigSigma)
+    #Change w1 to wtd_1 and w2 to wtd_2 and so on
+    w ~ MvNormal(zeros(10), bigSigma)
+    #w = hcat(wtd_1,wtd_2,wtd_3,wtd_4,wtd_5,wtd_6,wtd_7,wtd_8,wtd_9,wtd_10)
+    #k = 0;
+    #for j = 1:irat
+    #for i = 1:n
+        #HIGHERARCHY NEEDS TO GO HERE
+        #10 things one for each tb for that trial]
+        #for j = 1:10
+        #     k+= w[:,j] * x[i, j]
+        # end
+        # v = logistic(k)
+        #v = logistic(beta + wtd_1 * x[i,1] + wtd_2*x[i,2] + wtd_3*x[i,3] + wtd_4*x[i,4] + wtd_5*x[i,5] + wtd_6*x[i,6] + wtd_7*x[i,7] + wtd_8*x[i,8] + wtd_9*x[i,9] + wtd_10*x[i,10])
+        #v[irat] = logistic(beta + wtd_1 * x[i,1,j] + wtd_2*x[i,2,j] + wtd_3*x[i,3,j] + wtd_4*x[i,4] + wtd_5*x[i,5] + wtd_6*x[i,6] + wtd_7*x[i,7] + wtd_8*x[i,8] + wtd_9*x[i,9] + wtd_10*x[i,10])
+        #v = logistic(beta + wtd_1 * x[i,1] + wtd_2*x[i,2] + wtd_3*x[i,3] + wtd_4*x[i,4] + wtd_5*x[i,5] + wtd_6*x[i,6] + wtd_7*x[i,7] + wtd_8*x[i,8] + wtd_9*x[i,9] + wtd_10*x[i,10])
+    for i = 1:n
+        v = logistic(beta + transpose(x[i,:]) * w)
+        y[i] ~ Bernoulli(v)
+    end
 end;
 
 # LVR model
 # Weights timebins sepeartely but also weights left and right clicks seperately
 @model logistic_regression_LVR(x, y, n, σ, bigSigma) = begin
-        beta ~ Normal(0, σ)
-        #MvNormal(mu, sigma)
-        # mu is a vector and sigma is a PSD matrix
-        w_R ~ MvNormal(zeros(10), bigSigma)
-        w_L ~ MvNormal(zeros(10), bigSigma)
+    beta ~ Normal(0, σ)
+    #MvNormal(mu, sigma)
+    # mu is a vector and sigma is a PSD matrix
+    w_R ~ MvNormal(zeros(10), bigSigma)
+    w_L ~ MvNormal(zeros(10), bigSigma)
 
-        #k = 0;
-        #for j = 1:irat
-            #HIGHERARCHY NEEDS TO GO HERE
-            #10 things one for each tb for that trial]
-            #for j = 1:10
-            #     k+= w[:,j] * x[i, j]
-            # end
-            # v = logistic(k)
-            #v = logistic(beta + wtd_1 * x[i,1] + wtd_2*x[i,2] + wtd_3*x[i,3] + wtd_4*x[i,4] + wtd_5*x[i,5] + wtd_6*x[i,6] + wtd_7*x[i,7] + wtd_8*x[i,8] + wtd_9*x[i,9] + wtd_10*x[i,10])
-            #v[irat] = logistic(beta + wtd_1 * x[i,1,j] + wtd_2*x[i,2,j] + wtd_3*x[i,3,j] + wtd_4*x[i,4] + wtd_5*x[i,5] + wtd_6*x[i,6] + wtd_7*x[i,7] + wtd_8*x[i,8] + wtd_9*x[i,9] + wtd_10*x[i,10])
-        #Seperate out LVR matrices
-            xL = x[:,1:10]
-            xR = x[:,11:20]
-            #logistic_Matrix = beta .+ (xR * w_R) +  (xL* w_L)
-            for i = 1:n
-               #v = logistic(logistic_Matrix[i])
-               v = logistic(beta .+ transpose(xR[i,:])*w_R + transpose(xL[i,:])*w_L)
-               #y[i,irat] ~ Bernoulli(v[irat])
-               y[i] ~ Bernoulli(v)
-            end
-             #v = logistic.(logistic_Matrix)
-             #y = Bernoulli.(v)
+    #k = 0;
+    #for j = 1:irat
+        #HIGHERARCHY NEEDS TO GO HERE
+        #10 things one for each tb for that trial]
+        #for j = 1:10
+        #     k+= w[:,j] * x[i, j]
+        # end
+        # v = logistic(k)
+        #v = logistic(beta + wtd_1 * x[i,1] + wtd_2*x[i,2] + wtd_3*x[i,3] + wtd_4*x[i,4] + wtd_5*x[i,5] + wtd_6*x[i,6] + wtd_7*x[i,7] + wtd_8*x[i,8] + wtd_9*x[i,9] + wtd_10*x[i,10])
+        #v[irat] = logistic(beta + wtd_1 * x[i,1,j] + wtd_2*x[i,2,j] + wtd_3*x[i,3,j] + wtd_4*x[i,4] + wtd_5*x[i,5] + wtd_6*x[i,6] + wtd_7*x[i,7] + wtd_8*x[i,8] + wtd_9*x[i,9] + wtd_10*x[i,10])
+    #Seperate out LVR matrices
+    xL = x[:,1:10]
+    xR = x[:,11:20]
+        #logistic_Matrix = beta .+ (xR * w_R) +  (xL* w_L)
+    for i = 1:n
+       #v = logistic(logistic_Matrix[i])
+       v = logistic(beta .+ transpose(xR[i,:])*w_R + transpose(xL[i,:])*w_L)
+       #y[i,irat] ~ Bernoulli(v[irat])
+       y[i] ~ Bernoulli(v)
+    end
+         #v = logistic.(logistic_Matrix)
+         #y = Bernoulli.(v)
 end;
 
 
 
 # bd model using 10 seperate w's
 @model logistic_regression(x, y, n, σ) = begin
-            #Make normal distribution n+1 dimensional
-            beta ~ Normal(0, σ)
-            # Multivariate Normal instead of normal
-            #w ~ MultivariateNormal(zeros(10), covarianceMatrix #(10x10 bigSigma)
-            # mu is a vector and sigma is a PSD matrix
-            #MvNormal(mu, sigma)
-            #w ~ MvNormal(zeros(10), bigSigma)
-            #Change w1 to wtd_1 and w2 to wtd_2 and so on
-             wtd_1 ~  Normal(0, σ)
-             wtd_2 ~  Normal(0, σ)
-             wtd_3 ~  Normal(0, σ)
-             wtd_4 ~  Normal(0, σ)
-             wtd_5 ~  Normal(0, σ)
-             wtd_6 ~  Normal(0, σ)
-             wtd_7 ~  Normal(0, σ)
-             wtd_8 ~  Normal(0, σ)
-             wtd_9 ~  Normal(0, σ)
-             wtd_10 ~  Normal(0, σ)
-             #w = hcat(wtd_1,wtd_2,wtd_3,wtd_4,wtd_5,wtd_6,wtd_7,wtd_8,wtd_9,wtd_10)
+    #Make normal distribution n+1 dimensional
+    beta ~ Normal(0, σ)
+    # Multivariate Normal instead of normal
+    #w ~ MultivariateNormal(zeros(10), covarianceMatrix #(10x10 bigSigma)
+    # mu is a vector and sigma is a PSD matrix
+    #MvNormal(mu, sigma)
+    #w ~ MvNormal(zeros(10), bigSigma)
+    #Change w1 to wtd_1 and w2 to wtd_2 and so on
+    wtd_1 ~  Normal(0, σ)
+    wtd_2 ~  Normal(0, σ)
+    wtd_3 ~  Normal(0, σ)
+    wtd_4 ~  Normal(0, σ)
+    wtd_5 ~  Normal(0, σ)
+    wtd_6 ~  Normal(0, σ)
+    wtd_7 ~  Normal(0, σ)
+    wtd_8 ~  Normal(0, σ)
+    wtd_9 ~  Normal(0, σ)
+    wtd_10 ~  Normal(0, σ)
+    #w = hcat(wtd_1,wtd_2,wtd_3,wtd_4,wtd_5,wtd_6,wtd_7,wtd_8,wtd_9,wtd_10)
 
-            #k = 0;
-            #for j = 1:irat
-            for i = 1:n
-                #HIGHERARCHY NEEDS TO GO HERE
-                #10 things one for each tb for that trial]
-                #for j = 1:10
-                #     k+= w[:,j] * x[i, j]
-                # end
-                # v = logistic(k)
-                #v = logistic(beta + wtd_1 * x[i,1] + wtd_2*x[i,2] + wtd_3*x[i,3] + wtd_4*x[i,4] + wtd_5*x[i,5] + wtd_6*x[i,6] + wtd_7*x[i,7] + wtd_8*x[i,8] + wtd_9*x[i,9] + wtd_10*x[i,10])
-                #v[irat] = logistic(beta + wtd_1 * x[i,1,j] + wtd_2*x[i,2,j] + wtd_3*x[i,3,j] + wtd_4*x[i,4] + wtd_5*x[i,5] + wtd_6*x[i,6] + wtd_7*x[i,7] + wtd_8*x[i,8] + wtd_9*x[i,9] + wtd_10*x[i,10])
-                v = logistic(beta + wtd_1 * x[i,1] + wtd_2*x[i,2] + wtd_3*x[i,3] + wtd_4*x[i,4] + wtd_5*x[i,5] + wtd_6*x[i,6] + wtd_7*x[i,7] + wtd_8*x[i,8] + wtd_9*x[i,9] + wtd_10*x[i,10])
-                #y[i,irat] ~ Bernoulli(v[irat])
-                y[i] ~ Bernoulli(v)
-        end
-        end;
+    #k = 0;
+    #for j = 1:irat
+    for i = 1:n
+        #HIGHERARCHY NEEDS TO GO HERE
+        #10 things one for each tb for that trial]
+        #for j = 1:10
+        #     k+= w[:,j] * x[i, j]
+        # end
+        # v = logistic(k)
+        #v = logistic(beta + wtd_1 * x[i,1] + wtd_2*x[i,2] + wtd_3*x[i,3] + wtd_4*x[i,4] + wtd_5*x[i,5] + wtd_6*x[i,6] + wtd_7*x[i,7] + wtd_8*x[i,8] + wtd_9*x[i,9] + wtd_10*x[i,10])
+        #v[irat] = logistic(beta + wtd_1 * x[i,1,j] + wtd_2*x[i,2,j] + wtd_3*x[i,3,j] + wtd_4*x[i,4] + wtd_5*x[i,5] + wtd_6*x[i,6] + wtd_7*x[i,7] + wtd_8*x[i,8] + wtd_9*x[i,9] + wtd_10*x[i,10])
+        v = logistic(beta + wtd_1 * x[i,1] + wtd_2*x[i,2] + wtd_3*x[i,3] + wtd_4*x[i,4] + wtd_5*x[i,5] + wtd_6*x[i,6] + wtd_7*x[i,7] + wtd_8*x[i,8] + wtd_9*x[i,9] + wtd_10*x[i,10])
+        #y[i,irat] ~ Bernoulli(v[irat])
+        y[i] ~ Bernoulli(v)
+    end
+end;
 
 # Determines the cutoff point for the number of trials
-min_trial = 2^63 -1
+min_trial = 2^63 - 1
 for irat= 1 : 15
-        # Provides the columns we need for that rat
-        regrData = select(data[irat]["stimon"]["X"], :gr,28:37)
-        #println("rat ", irat, "'s # of trials: ", size(regrData)[1])
-        temp = size(regrData)[1]
-        if(temp < min_trial)
-            global min_trial = temp
-        end
+    # Provides the columns we need for that rat
+    regrData = select(data[irat]["stimon"]["X"], :gr,28:37)
+    #println("rat ", irat, "'s # of trials: ", size(regrData)[1])
+    temp = size(regrData)[1]
+    if(temp < min_trial)
+        global min_trial = temp
+    end
 end
+
 # Assuming an 80-20 train-test split these will be the length of the trial dimension of
 # of those matrices respectively
 train_length = Int(min_trial * 0.8)
 test_length = Int(min_trial * 0.2)
-
 
 """
 Data processing
 """
 # Creates a Markov chain using LVR model to be used in model predictions
 function data_processing_LVR(irat)
-        println("Processing rat ", irat)
-        # Grabs the click difference left and right columns from the data set
-        LVR_data = select(data[irat]["stimon"]["X"], :gr, 6:15,17:26)
-        # Cuts off the number of trials so all rats can be put into one 3D matrix
-        LVR_data = LVR_data[1:min_trial,:]
-        #Calls earlier function, splitting the data into training and test sets (80-20:training-test split)
-        trainset, testset = split_data(LVR_data, target, at = 0.8)
-        # Converts training and test data into matrices
-        train = Matrix(trainset[:,2:21])
-        test = Matrix(testset[:, 2:21])
-        # Stores each rats train and test matrix into a 3D matrix
-        train_rats_LVR[:,:, irat] = train
-        test_rats_LVR[:,:,irat] = test
-        # # Converts training and test gr values into column vectors
-        # # Stores each rats train and test labels into a 2D matrix
-        train_label_LVR[:,irat] = trainset[:, target]
-        test_label_LVR[:, irat] = testset[:, target]
-        n, _ = size(train)
-        chain = mapreduce(c -> sample(logistic_regression_LVR(train_rats_LVR[:,:,irat], train_label_LVR[:,irat], train_length, 1, I), HMC(0.05, 10), 1500),
-           chainscat,
-               1:3
-        )
-        return chain
+    println("Processing rat ", irat)
+    # Grabs the click difference left and right columns from the data set
+    LVR_data = select(data[irat]["stimon"]["X"], :gr, 6:15,17:26)
+    # Cuts off the number of trials so all rats can be put into one 3D matrix
+    LVR_data = LVR_data[1:min_trial,:]
+    #Calls earlier function, splitting the data into training and test sets (80-20:training-test split)
+    trainset, testset = split_data(LVR_data, target, at = 0.8)
+    # Converts training and test data into matrices
+    train = Matrix(trainset[:,2:21])
+    test = Matrix(testset[:, 2:21])
+    # Stores each rats train and test matrix into a 3D matrix
+    train_rats_LVR[:,:, irat] = train
+    test_rats_LVR[:,:,irat] = test
+    # # Converts training and test gr values into column vectors
+    # # Stores each rats train and test labels into a 2D matrix
+    train_label_LVR[:,irat] = trainset[:, target]
+    test_label_LVR[:, irat] = testset[:, target]
+    n, _ = size(train)
+    chain = mapreduce(c -> sample(logistic_regression_LVR(train_rats_LVR[:,:,irat], train_label_LVR[:,irat], train_length, 1, I), HMC(0.05, 10), 1500),
+       chainscat,
+           1:3
+    )
+    return chain
 end
 
 #Creates an empty list for the LVR chains for each rat to be stored
