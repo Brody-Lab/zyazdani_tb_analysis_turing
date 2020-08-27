@@ -21,11 +21,8 @@ PLOTS
 
 """
 Action items left to complete for Stage 1
--~Plot psychometric curves and ROC
 -Extend model to make it higherarchical
--Test model
 -Might also want to plot confidence interval
-
 
 """
 """
